@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
+from mmcv.ops import soft_nms, cp_cluster
 
 from ultralytics.utils import LOGGER
 from ultralytics.utils.metrics import batch_probiou
@@ -170,7 +171,7 @@ def non_max_suppression(
     labels=(),
     max_det=300,
     nc=0,  # number of classes (optional)
-    max_time_img=0.05,
+    max_time_img=1.0,
     max_nms=30000,
     max_wh=7680,
     in_place=True,
@@ -231,7 +232,7 @@ def non_max_suppression(
 
     # Settings
     # min_wh = 2  # (pixels) minimum box width and height
-    time_limit = 2.0 + max_time_img * bs  # seconds to quit after
+    time_limit = 20.0 + max_time_img * bs  # seconds to quit after
     multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
 
     prediction = prediction.transpose(-1, -2)  # shape(1,84,6300) to shape(1,6300,84)
@@ -289,7 +290,23 @@ def non_max_suppression(
             i = nms_rotated(boxes, scores, iou_thres)
         else:
             boxes = x[:, :4] + c  # boxes (offset by class)
-            i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+            # NMS
+            i = torchvision.ops.nms(boxes, scores, iou_thres)
+
+            # SOFT-NMS
+            # LOGGER.warning(f"WARNING using SOFT-NMS")
+            # dets, i = soft_nms(boxes.contiguous(), scores.contiguous(), iou_threshold=iou_thres,
+            #                sigma=0.5, min_score=0.001, method='linear', offset=0)
+            # x[i, 4] = dets[:, 4]
+            # x[i, :4] = dets[:, :4] - c[i, :]
+
+            #CP_Cluster
+            # LOGGER.warning(f"WARNING using CP_Cluster")
+            # dets, i = cp_cluster(boxes.contiguous(), scores.contiguous(), iou_threshold=iou_thres,
+            #                sigma=0.5, min_score=0.001, method='linear', offset=0)
+            # x[i, 4] = dets[:, 4]
+            # x[i, :4] = dets[:, :4] - c[i, :]
+
         i = i[:max_det]  # limit detections
 
         # # Experimental
